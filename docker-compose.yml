@@ -1,0 +1,40 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION}
+    container_name: cldflrd
+    command: proxy-dns
+    environment:
+      TUNNEL_DNS_UPSTREAM: https://9.9.9.9/dns-query,https://149.112.112.112/dns-query
+      TUNNEL_DNS_ADDRESS: 0.0.0.0 # Allow request from the pihole container
+      TUNNEL_METRICS: 0.0.0.0:80 # Allow requests from other hosts and always use port 80
+    restart: unless-stopped
+    ports:
+      - 0.0.0.0:${CLOUDFLARED_METRICS_PORT}:80/tcp
+  pihole:
+    container_name: phl
+    image: pihole/pihole:${PI_HOLE_VERSION}
+    restart: unless-stopped
+    ports:
+      # 
+      - ${HOST_IP}:53:53/udp
+      - ${HOST_IP}:53:53/tcp
+      - 0.0.0.0:${PI_HOLE_WEB_ADMIN_PORT}:80/tcp
+    environment:
+      TZ: Europe/Berlin
+      WEBPASSWORD_FILE: /run/secrets/pi_hole_webpw
+      WEB_BIND_ADDR: 0.0.0.0
+      PIHOLE_DNS_: cldflrd # containername of cloudflared
+      DNSMASQ_LISTENING: all # Otherwise DNS requests outside of this docker-compose network are ignored
+      FTLCONF_BLOCKINGMODE: NXDOMAIN
+    volumes:
+      - pihole-data:/etc/pihole/
+      - ./data/log/:/var/log/pihole/
+    depends_on:
+      - cloudflared
+    secrets:
+      - pi_hole_webpw
+volumes:
+  pihole-data:
+secrets:
+  pi_hole_webpw:
+    file: ./pi-hole-webpw.secret
